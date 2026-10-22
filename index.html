@@ -49,7 +49,8 @@ h1{font-family:var(--serif);font-size:30px;line-height:1.45;font-weight:700;marg
 dl{margin:0}
 .f{display:grid;grid-template-columns:5em 1fr;gap:0 12px;padding:18px 0;border-top:1px solid var(--line)}
 .f dt{font-size:12px;color:var(--sub);padding-top:3px;letter-spacing:.06em}
-.f dd{margin:0}
+.f dd{margin:0;overflow-wrap:anywhere}
+.memo{white-space:pre-wrap;line-height:1.8}
 .lk{border-bottom:1px solid var(--line);transition:color .2s,border-color .2s}
 .lk:hover,.lk:active{color:var(--accent);border-color:var(--accent)}
 .pp{display:block;margin-bottom:12px;line-height:1.6}
@@ -153,6 +154,7 @@ const byField=(k,v)=>streams.filter(s=>filters[k](s)(v));
 
 /* ===== 描画 ===== */
 const app=document.getElementById("app");
+const memoHtml=t=>esc(t).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,(m,a,u)=>`<a class="lk" href="${u}" target="_blank" rel="noopener">${a}</a>`); // [文字](URL) を文字リンクに
 const link=(k,v)=>v?`<a class="lk" href="#/f/${k}/${enc(v)}">${esc(v)}</a>`:"";
 const ytId=u=>{const m=String(u||"").match(/(?:v=|youtu\.be\/|\/(?:live|shorts|embed)\/)([\w-]{11})/);return m?m[1]:""};
 const thumb=s=>{const id=ytId(s.urls[0]&&s.urls[0].url);return id?`<img class="th" loading="lazy" alt="" src="https://i.ytimg.com/vi/${id}/mqdefault.jpg" onerror="this.parentNode.classList.add('nt');this.remove()">`:""};
@@ -256,7 +258,7 @@ function detail(id){
    <div class="f"><dt>GM</dt><dd>${s.gms.map(g=>person(g)).join("")}</dd></div>
    <div class="f"><dt>参加</dt><dd>${s.cast.map(c=>person(c.pl,c.pc?` <small class="pcn">／ ${link("pc",c.pc)}</small>`:"")).join("")}</dd></div>
    ${s.tags.length?`<div class="f"><dt>Xタグ</dt><dd>${s.tags.map(t=>`<a class="x" href="https://x.com/search?q=${enc("#"+t)}" target="_blank" rel="noopener">#${esc(t)}</a>`).join("")}</dd></div>`:""}
-   ${s.memo?`<div class="f"><dt>メモ</dt><dd>${esc(s.memo)}</dd></div>`:""}
+   ${s.memo?`<div class="f"><dt>メモ</dt><dd class="memo">${memoHtml(s.memo)}</dd></div>`:""}
   </dl>
   ${rels.length?`<h2 class="rel">関連する配信</h2>${rels.join("")}`:""}${note()}`;
 }

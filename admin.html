@@ -86,22 +86,28 @@ function bindPairs(){
 }
 const vals=id=>[...document.querySelectorAll(`#${id} .pair`)].map(p=>[...p.querySelectorAll("input")].map(i=>i.value.trim()));
 
+function sysSelect(cur){ // 既存のシステムから選択。「＋ 新しく追加」で入力
+  const all=[...new Set([...D.pub,...D.draft].map(x=>x["システム"]).filter(Boolean).concat(cur?[cur]:[]))].sort((a,b)=>a.localeCompare(b,"ja"));
+  return `<select id="f3" onchange="f3n.style.display=this.value==='__new'?'block':'none'" style="width:100%;font:inherit;font-size:16px;padding:8px 0;border:0;border-bottom:1px solid var(--line);background:none;border-radius:0">
+  <option value="">（未選択）</option>${all.map(x=>`<option${x===cur?" selected":""}>${esc(x)}</option>`).join("")}<option value="__new">＋ 新しく追加…</option></select>
+  <input id="f3n" placeholder="新しいシステム名" style="display:none">`;
+}
 function form(kind,r={}){ // kind: pub / draft / new
   const cast=parseCast(r["PL/PC"]), urls=parseUrls(r["URL"]);
   app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${{pub:"公開中",draft:"下書き",new:"新規"}[kind]}</span></div>
   <label>配信日時</label><input type="date" id="f1" value="${esc(r["配信日時"])}">
   <label>シナリオ</label><input id="f2" value="${esc(r["シナリオ"])}">
-  <label>システム</label><input id="f3" value="${esc(r["システム"])}">
+  <label>システム</label>${sysSelect(r["システム"])}
   <label>GM（複数人は , で区切る）</label><input id="f4" value="${esc(r["GM"])}">
   <label>参加者（PL / PC）</label>${pairs("cast",cast,"PL名","PC名")}
   <label>配信URL（前編・後編など）</label>${pairs("urls",urls,"前編など","https://…")}
   <label>タグ（Xのハッシュタグ。# なし）</label><input id="f7" value="${esc(r["タグ"])}">
-  <label>メモ</label><textarea id="f8">${esc(r["メモ"])}</textarea>
+  <label>メモ（[文字](URL) で文字リンク）</label><textarea id="f8">${esc(r["メモ"])}</textarea>
   <div class="btns">${kind==="pub"?'<button class="btn" data-a="save">保存</button>':'<button class="btn g" data-a="draft">下書き保存</button><button class="btn" data-a="publish">公開する</button>'}
   <button class="btn g" data-a="preview">プレビュー</button>${kind==="new"?"":'<button class="btn g" data-a="dup">複製</button>'}
   ${kind==="pub"?'<button class="btn g" data-a="unpub">非公開にする</button>':""}${kind==="new"?"":'<button class="btn d" data-a="del">削除</button>'}</div><p class="msg" id="msg"></p>`;
   bindPairs(); document.getElementById("bk").onclick=list;
-  const collect=()=>({"配信日時":f1.value,"シナリオ":f2.value.trim(),"システム":f3.value.trim(),"GM":f4.value.trim(),
+  const collect=()=>({"配信日時":f1.value,"シナリオ":f2.value.trim(),"システム":(f3.value==="__new"?f3n.value:f3.value).trim(),"GM":f4.value.trim(),
     "PL/PC":vals("cast").filter(c=>c[0]).map(c=>c[1]?`${c[0]}(${c[1]})`:c[0]).join(", "),
     "URL":vals("urls").filter(c=>c[1]).map(c=>c[0]?`${c[0]}:${c[1]}`:c[1]).join(","),"タグ":f7.value.trim().replace(/#/g,""),"メモ":f8.value});
   const run=async(fn,done)=>{setMsg("処理中…");try{await fn();await load();}catch(e){setMsg(e.message);}};
