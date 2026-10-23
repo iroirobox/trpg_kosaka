@@ -71,13 +71,9 @@ details[open] summary::after{content:"−";color:var(--accent)}
 </head>
 <body>
 <main id="app"><p class="empty">読み込み中</p></main>
+<script src="config.js"></script>
 <script>
-/* ===== 設定 =====
-   API_URL: Google Apps Script などで公開した「公開済みデータのみ」を返すURLを入れる。
-   形式: { "streams":[{配信日時,シナリオ,システム,GM,"PL/PC",URL,タグ,メモ}], "pcs":[{PC,PL,継続セッション}] }
-   空のままだと下のSAMPLE（仮データ）を表示する。*/
-const CONFIG = { SITE_TITLE: "TRPG配信アーカイブ＜コーサカ＞", OWNER: "コーサカ", // OWNER: 「GM」「PL」検索で絞り込む配信者名
-   API_URL: "https://script.google.com/macros/s/AKfycbzuQfAy0AM0hA-EbdRrly8yHBFijse58u8RQnXCKQWxeRPJecBl4PIxmNJvP1vkPDrx/exec" };
+/* 設定は config.js にあります（人・サイトごとに違うのはそのファイルだけ） */
 
 /* ===== 仮データ（接続前の表示確認用。実データではない） ===== */
 const SAMPLE = {
@@ -278,6 +274,7 @@ let st; addEventListener("scroll",()=>{clearTimeout(st);st=setTimeout(()=>histor
 
 /* ===== 起動 ===== */
 (async()=>{
+  document.title=CONFIG.SITE_TITLE+"（非公式）";
   try{
     if(CONFIG.API_URL){ const r=await fetch(CONFIG.API_URL), j=await r.json();
       if(location.hash.startsWith("#/preview")){ try{ const x=JSON.parse(localStorage.getItem("trpg_preview")); if(x){x.__preview=1; j.streams.push(x);} }catch(e){} } // 管理画面のプレビュー
