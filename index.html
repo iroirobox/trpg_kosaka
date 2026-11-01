@@ -67,6 +67,13 @@ summary span{color:var(--sub);font-size:12px;margin-left:auto}
 summary::after{content:"+";color:var(--sub);margin-left:16px;width:1em;text-align:center}
 details[open] summary::after{content:"−";color:var(--accent)}
 .rel{margin:72px 0 8px}
+.more+.more{margin-left:24px}
+.tr{display:grid;grid-template-columns:5.5em 1fr;gap:0 12px;padding:18px 0;border-top:1px solid var(--line)}
+.tr:last-child{border-bottom:1px solid var(--line)}
+.tdt{font-size:12px;color:var(--sub);padding-top:3px;font-variant-numeric:tabular-nums}
+.tb{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.tm a,.tm span{display:block;margin-top:10px}
+.tm img{width:160px;max-width:100%;display:block;background:#f2f2f2}
 .sp{display:flex;justify-content:space-between;border-top:1px solid var(--line);padding:18px 0;font-size:14px}
 .sp span{color:var(--sub)}
 .sp:hover{color:var(--accent)}
@@ -129,7 +136,7 @@ function parseSessions(s){ // "①シナリオ名:URL" 複数（URLなしも可�
   }).filter(Boolean);
 }
 
-let streams=[], pcs=[], scn={}, isSample=false;
+let streams=[], pcs=[], scn={}, tline=[], isSample=false;
 function build(raw){
   streams = raw.streams.map((r,i)=>{
     const cast=parseCast(r["PL/PC"]);
@@ -139,6 +146,7 @@ function build(raw){
     return o;
   }).sort((a,b)=>b.date.localeCompare(a.date));
   streams.forEach((x,i)=>x.id=i); // 並べ替え後に番号を振る（詳細画面の取り違え防止）
+  tline = (raw.timeline||[]).map(x=>({date:x.date||"",memo:x.memo||"",imgs:(()=>{try{return JSON.parse(x.img||"{}")}catch(e){return {}}})()}));
   scn = {}; Object.keys(raw.scenarios||{}).forEach(n=>{scn[norm(n)]={name:n,...raw.scenarios[n]}}); // シナリオページ
   pcs = (raw.pcs||[]).map(r=>({pc:r["PC"]||"",pl:r["PL"]||"",sessions:parseSessions(r["継続セッション"])}));
 }
@@ -183,7 +191,7 @@ function home(q=""){
   const list=q?search(q):streams.slice(0,8);
   app.innerHTML=head+`<input type="search" id="q" placeholder="シナリオ、システム、GM、PL、PC" value="${esc(q)}" autocomplete="off" enterkeyhint="search">
   <h2>${q?`${list.length}件`:"最近の配信"}</h2><div id="list">${list.map(row).join("")||NONE}</div>
-  ${!q&&streams.length>8?'<a class="more" href="#/all">すべて見る</a>':""}${note()}`;
+  ${!q?`<div>${streams.length>8?'<a class="more" href="#/all">すべて見る</a>':""}${tline.length?'<a class="more" href="#/tl">年表</a>':""}</div>`:""}${note()}`;
   const input=document.getElementById("q");
   input.addEventListener("input",()=>{ // 一覧だけ更新し、検索語はアドレスに上書き保存（戻ると検索結果に戻る）
     const v=input.value, l=v?search(v):streams.slice(0,8);
@@ -279,6 +287,27 @@ function detail(id){
   ${rels.length?`<h2 class="rel">関連する配信</h2>${rels.join("")}`:""}${note()}`;
 }
 const parseHead=h=>{const p=String(h).split(/[|｜]/).map(x=>x.trim());return{name:p[0],w:p.includes("狭")?140:p.includes("広")?320:200,f:p.some(x=>/^絞り?込み?$/.test(x))}}; // 項目名|狭|広|絞込
+function tlMemo(t,imgs){ // メモ：リンク化。YouTube・BOOTHのURLは画像つき（YouTubeは、サイト内の配信と一致したときだけ飛べる）
+  const media=[], seen=new Set();
+  const html=esc(t).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[\w\-.\/?=&;%#~:+@!$*,]+)/g,(m,a,u1,u2)=>{
+    const raw=(u1||u2).replace(/&amp;/g,"&"), st=byUrl(raw);
+    if(!seen.has(raw)){seen.add(raw);media.push(raw)}
+    const label=a||(st?esc(st.scenario):u2);
+    return st?`<a class="lk" href="#/s/${st.id}">${label}</a>`:`<a class="lk" href="${esc(raw)}" target="_blank" rel="noopener">${label}</a>`;
+  });
+  const pics=media.map(u=>{const id=ytId(u), st=byUrl(u);
+    if(id){const img=`<img loading="lazy" alt="" src="https://i.ytimg.com/vi/${id}/mqdefault.jpg" onerror="this.remove()">`; return st?`<a href="#/s/${st.id}">${img}</a>`:`<span>${img}</span>`;}
+    const im=imgs&&imgs[u]; return /booth\.pm/.test(u)&&im?`<a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="${esc(im)}" onerror="this.remove()"></a>`:"";}).join("");
+  return html+(pics?`<div class="tm">${pics}</div>`:"");
+}
+function tlPage(){ // 年表。最初は新しい順（同じ日付の中は、シートの行順）
+  const old=history.state&&history.state.tlo==="old";
+  const asc=tline.map((x,i)=>({...x,i})).sort((a,b)=>a.date.localeCompare(b.date)||a.i-b.i), list=old?asc:[...asc].reverse();
+  app.innerHTML=head+`<a class="back" href="javascript:history.back()">戻る</a><h1>年表</h1>
+  <p class="kicker" style="margin-top:12px"><button class="${old?"":"on"}" data-o="new">新しい順</button> / <button class="${old?"on":""}" data-o="old">古い順</button></p>
+  <div style="margin-top:32px">${list.map(x=>`<div class="tr"><span class="tdt">${esc(x.date)}</span><div class="tb">${tlMemo(x.memo,x.imgs)}</div></div>`).join("")||'<p class="empty">まだありません</p>'}</div>${note()}`;
+  app.querySelectorAll("[data-o]").forEach(b=>b.onclick=()=>{history.replaceState({...history.state,tlo:b.dataset.o},"");const y=scrollY;tlPage();scrollTo(0,y)});
+}
 function scenarioPage(name){ // 行＝セッション（横にスクロールできる表）。並びはシートの行順
   const sp=scn[norm(name)]; if(!sp) return home();
   const cols=sp.heads.slice(1).map(parseHead), st=history.state||{}, sf=st.sf||{}, memo=String(sp.heads[0]||"").trim(); // A1=ページのメモ
@@ -308,6 +337,7 @@ function route(){
   else if(h[1]==="f"&&filters[h[2]]) filterPage(h[2],h.slice(3).join("/"));
   else if(h[1]==="all") allPage();
   else if(h[1]==="preview"){const x=streams.find(t=>t.preview); x?detail(x.id):home();}
+  else if(h[1]==="tl") tlPage();
   else if(h[1]==="sc") scenarioPage(h.slice(2).join("/"));
   else if(h[1]==="q") home(h.slice(2).join("/"));
   else home();

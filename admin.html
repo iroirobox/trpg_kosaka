@@ -34,6 +34,9 @@ textarea{display:block;resize:none;min-height:0;overflow:hidden}
 .btn{background:var(--accent);color:#fff;padding:12px 24px;border-radius:999px;font-size:14px}
 .btn.g{background:none;color:var(--ink);border:1px solid var(--line)}
 .btn.d{background:none;color:var(--accent);border:1px solid var(--accent)}
+.tr2{display:flex;align-items:center;border-bottom:1px solid var(--line)}
+.tr2 .row{border-bottom:0;flex:1;width:auto}
+.mvb{padding:10px 12px;color:var(--sub);font-size:13px}
 .sr{display:flex;gap:14px;align-items:center}
 .sr img{width:96px;aspect-ratio:16/9;object-fit:cover;background:#f2f2f2;flex:0 0 auto}
 .sr span{min-width:0}
@@ -82,16 +85,18 @@ function login(msg=""){
 }
 async function load(){ D=await api("list"); list(); }
 function list(){
-  const t={pub:"公開中",draft:"下書き",pcs:"PC詳細",sc:"シナリオ"};
-  const items=tab==="sc"?(D.sc||[]):tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
+  const t={pub:"公開中",draft:"下書き",pcs:"PC詳細",sc:"シナリオ",tl:"年表"};
+  const items=tab==="tl"?tlSorted():tab==="sc"?(D.sc||[]):tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
   app.innerHTML=`<div class="top"><b>管理</b><button id="out">ログアウト</button></div>
   <div class="tabs">${Object.keys(t).map(k=>`<button data-t="${k}" class="${tab===k?"on":""}">${t[k]}</button>`).join("")}</div>
   <button class="add" id="new">＋ 新規登録</button>
-  ${items.map((r,i)=>tab==="sc"?`<button class="row" data-i="${i}"><b>${esc(r)}</b></button>`:tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
+  ${items.map((r,i)=>tab==="tl"?tlRow(r,i,items):tab==="sc"?`<button class="row" data-i="${i}"><b>${esc(r)}</b></button>`:tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
    :`<button class="row" data-i="${i}"><small>${esc(r["配信日時"])}${tab==="draft"?"　"+esc(r["状態"]):""}</small><b>${esc(r["シナリオ"]||"（無題）")}</b></button>`).join("")||'<p class="empty">なし</p>'}`;
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;list()});
-  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="sc"?scPage(items[b.dataset.i]):tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
-  document.getElementById("new").onclick=()=>tab==="sc"?scCreate():tab==="pcs"?pcForm():form("new");
+  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="tl"?tlForm(items[b.dataset.i]):tab==="sc"?scPage(items[b.dataset.i]):tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
+  app.querySelectorAll("[data-mv]").forEach(b=>b.onclick=async()=>{const[i,d]=b.dataset.mv.split(":").map(Number); b.disabled=true;
+    try{await api("tl_swap",{a:items[i]._row,b:items[i+d]._row}); await load();}catch(e){alert(e.message)}});
+  document.getElementById("new").onclick=()=>tab==="tl"?tlForm():tab==="sc"?scCreate():tab==="pcs"?pcForm():form("new");
   document.getElementById("out").onclick=()=>{sessionStorage.removeItem("pw");pw="";login()};
 }
 const pairRow=(a,b,pa,pb)=>`<div class="pair"><input value="${esc(a)}" placeholder="${pa}"><input value="${esc(b)}" placeholder="${pb}"><button class="x" type="button">×</button></div>`;
@@ -139,6 +144,33 @@ function form(kind,r={}){ // kind: pub / draft / new
     if(a==="unpub"&&confirm("非公開にしますか？（下書きに移ります）")) run(()=>api("unpublish",{row:r._row}));
     if(a==="del"&&confirm("削除しますか？元に戻せません")) run(()=>api("delete",{sheet:kind==="pub"?"pub":"draft",row:r._row}));
   };});
+}
+/* ---- 年表 ---- */
+const tlSorted=()=>[...(D.tl||[])].sort((a,b)=>a.date.localeCompare(b.date)||a._row-b._row).reverse(); // 新しい順
+const tlRow=(r,i,a)=>`<div class="tr2"><button class="row" data-i="${i}"><small>${esc(r.date)}</small><b style="font-size:14px">${esc(r.memo.replace(/\[([^\]]+)\]\([^)]*\)/g,"$1").split("\n")[0].slice(0,40))}</b></button>
+  ${i>0&&a[i-1].date===r.date?`<button class="mvb" data-mv="${i}:-1" aria-label="上へ">▲</button>`:""}${i<a.length-1&&a[i+1].date===r.date?`<button class="mvb" data-mv="${i}:1" aria-label="下へ">▼</button>`:""}</div>`;
+function tlForm(r){
+  app.onclick=null;
+  const today=new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  const streams=[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"]));
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>年表</span></div>
+  <label>日付</label><input type="date" id="tld" value="${esc(r?r.date:today)}">
+  <label>メモ（[文字](URL) でリンク。YouTube・BOOTHのURLは画像つきで出ます）</label><textarea id="tlm">${esc(r?r.memo:"")}</textarea>
+  <button class="plus" type="button" id="tli">配信を挿入</button>
+  <div id="tlp" style="display:none"><input id="tlq" placeholder="シナリオ名で探す"><div id="tll"></div></div>
+  <div class="btns"><button class="btn" id="sv">保存</button>${r?'<button class="btn d" id="dl">削除</button>':""}</div><p class="msg" id="msg"></p>`;
+  document.getElementById("bk").onclick=()=>load();
+  const draw=q=>{const l=streams.filter(x=>!q||norm(x["シナリオ"]).includes(norm(q))).slice(0,30);
+    document.getElementById("tll").innerHTML=l.map(x=>{const u=(parseUrls(x["URL"])[0]||[])[1]||"";
+      return `<button type="button" class="row sr" data-u="${esc(u)}" data-t="${esc(x["シナリオ"])}">${thumbImg(u)}<span><b style="font-size:14px">${esc(x["シナリオ"])}</b><small>${esc(sInfo(x)||x["配信日時"])}</small></span></button>`}).join("")||'<p class="empty">なし</p>'};
+  document.getElementById("tli").onclick=()=>{const p=document.getElementById("tlp"); p.style.display=p.style.display==="none"?"block":"none"; draw("")};
+  document.getElementById("tlq").oninput=e=>draw(e.target.value);
+  app.onclick=e=>{const b=e.target.closest("[data-u]"); if(!b||!b.dataset.u) return; const t=document.getElementById("tlm"), pos=t.selectionStart??t.value.length;
+    t.value=t.value.slice(0,pos)+`[${b.dataset.t}](${b.dataset.u})`+t.value.slice(pos); fit(t); document.getElementById("tlp").style.display="none";};
+  const run=async fn=>{setMsg("処理中…");try{await fn();await load();}catch(e){setMsg(e.message)}};
+  document.getElementById("sv").onclick=()=>{ if(!tld.value||!tlm.value.trim()) return setMsg("日付とメモを入力してください");
+    run(()=>api("tl_save",{row:r?r._row:undefined,data:{"日付":tld.value,"メモ":tlm.value}})); };
+  if(r) document.getElementById("dl").onclick=()=>{if(confirm("削除しますか？元に戻せません")) run(()=>api("tl_delete",{row:r._row}))};
 }
 /* ---- シナリオページ（シナリオごとのシート）の編集 ---- */
 const norm=s=>String(s||"").normalize("NFKC").toLowerCase().trim();
