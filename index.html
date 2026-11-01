@@ -77,6 +77,10 @@ details[open] summary::after{content:"−";color:var(--accent)}
 .tw th:first-child,.tw td:first-child{position:sticky;left:0;background:#fff;min-width:110px;max-width:110px;z-index:1}
 .tw .s .d{display:block;font-size:11px;color:var(--sub);line-height:1.5}
 .tw .s img{margin-bottom:6px}
+.fp{margin:8px 0 0}
+.fp label{display:block;font-size:12px;color:var(--sub);margin:16px 0 0}
+.fp select{width:100%;font:inherit;font-size:16px;padding:8px 0;border:0;border-bottom:1px solid var(--line);background:none;border-radius:0;-webkit-appearance:none;color:inherit}
+#sfb{margin-top:24px;background:none}
 .note{margin-top:72px;font-size:11px;color:var(--sub);letter-spacing:.04em}
 </style>
 </head>
@@ -271,17 +275,28 @@ function detail(id){
   </dl>
   ${rels.length?`<h2 class="rel">関連する配信</h2>${rels.join("")}`:""}${note()}`;
 }
+const parseHead=h=>{const p=String(h).split("|");return{name:p[0],w:p.includes("狭")?140:p.includes("広")?320:200,f:p.includes("絞込")}}; // 項目名|狭|広|絞込
 function scenarioPage(name){ // 行＝セッション（横にスクロールできる表）。並びはシートの行順
   const sp=scn[norm(name)]; if(!sp) return home();
-  const cols=sp.heads.slice(1);
-  const body=sp.rows.map(r=>{
-    const u=parseUrls(r[0])[0]||{}, st=byUrl(u.url), id=ytId(u.url), href=st?"#/s/"+st.id:u.url;
+  const cols=sp.heads.slice(1).map(parseHead), st=history.state||{}, sf=st.sf||{};
+  const toks=v=>String(v||"").split(/[,、，]/).map(x=>x.trim()).filter(Boolean);
+  const fcols=cols.map((c,i)=>c.f?i:-1).filter(i=>i>=0), on=fcols.filter(i=>sf[i]);
+  const rows=sp.rows.filter(r=>on.every(i=>toks(r[i+1]).some(t=>norm(t)===norm(sf[i]))));
+  const body=rows.map(r=>{
+    const u=parseUrls(r[0])[0]||{}, ps=byUrl(u.url), id=ytId(u.url), href=ps?"#/s/"+ps.id:u.url;
     const img=id?`<img class="th" style="width:96px" loading="lazy" alt="" src="https://i.ytimg.com/vi/${id}/mqdefault.jpg" onerror="this.remove()">`:"";
-    const cell=`${img}<span class="d">${esc(st?st.date:"")}</span><span class="d">${st?st.tags.map(t=>"#"+esc(t)).join(" "):""}</span>`;
-    return `<tr><td class="s">${href?`<a href="${esc(href)}"${st?"":' target="_blank" rel="noopener"'}>${cell}</a>`:cell}</td>${cols.map((_,i)=>`<td>${memoHtml(r[i+1])}</td>`).join("")}</tr>`;
+    const cell=`${img}<span class="d">${esc(ps?ps.date:"")}</span><span class="d">${ps?ps.tags.map(t=>"#"+esc(t)).join(" "):""}</span>`;
+    return `<tr><td class="s">${href?`<a href="${esc(href)}"${ps?"":' target="_blank" rel="noopener"'}>${cell}</a>`:cell}</td>${cols.map((c,i)=>`<td style="min-width:${c.w}px;max-width:${c.w}px">${memoHtml(r[i+1])}</td>`).join("")}</tr>`;
   }).join("");
-  app.innerHTML=head+`<a class="back" href="javascript:history.back()">戻る</a><p class="kicker">シナリオ</p><h1>${esc(sp.name)}</h1>
-  <div class="tw"><table><thead><tr><th>セッション</th>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>${body?"":'<p class="empty">まだありません</p>'}${note()}`;
+  const panel=fcols.length?`<button class="act" id="sfb">絞り込み${on.length?"（"+on.length+"）":""}</button>${st.sfo?`<div class="fp">${fcols.map(i=>{
+    const vals=[...new Set(sp.rows.flatMap(r=>toks(r[i+1])))].sort((a,b)=>a.localeCompare(b,"ja"));
+    return `<label>${esc(cols[i].name)}</label><select data-f="${i}"><option value="">すべて</option>${vals.map(v=>`<option${sf[i]===v?" selected":""}>${esc(v)}</option>`).join("")}</select>`}).join("")}${on.length?'<button class="act" id="sfr">すべてに戻す</button>':""}</div>`:""}`:"";
+  app.innerHTML=head+`<a class="back" href="javascript:history.back()">戻る</a><p class="kicker">シナリオ</p><h1>${esc(sp.name)}</h1>${panel}
+  <div class="tw"><table><thead><tr><th>セッション</th>${cols.map(c=>`<th style="min-width:${c.w}px">${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>${body?"":'<p class="empty">該当するセッションがありません</p>'}${note()}`;
+  const set=o=>{history.replaceState({...history.state,...o},"");const y=scrollY;scenarioPage(name);scrollTo(0,y)};
+  const b=document.getElementById("sfb"); if(b) b.onclick=()=>set({sfo:!st.sfo});
+  const r=document.getElementById("sfr"); if(r) r.onclick=()=>set({sf:{}});
+  app.querySelectorAll("[data-f]").forEach(x=>x.onchange=()=>set({sf:{...sf,[x.dataset.f]:x.value}}));
 }
 function route(){
   let hash=location.hash.slice(1); try{hash=decodeURIComponent(hash)}catch(e){}
