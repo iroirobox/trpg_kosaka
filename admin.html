@@ -25,7 +25,7 @@ h1{font-family:var(--serif);font-size:22px;margin:0 0 32px}
 label{display:block;font-size:12px;color:var(--sub);margin:24px 0 0;letter-spacing:.06em}
 input,textarea{width:100%;font:inherit;font-size:16px;padding:8px 0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;outline:0;-webkit-appearance:none}
 input:focus,textarea:focus{border-bottom-color:var(--accent)}
-textarea{resize:vertical;min-height:4em}
+textarea{display:block;resize:none;min-height:2.8em;overflow:hidden}
 .pair{display:flex;gap:12px;align-items:center}
 .pair input:first-child{flex:0 0 38%}
 .x{color:var(--sub);padding:0 4px}
@@ -41,6 +41,8 @@ textarea{resize:vertical;min-height:4em}
 .hrow{display:flex;gap:12px;align-items:center}
 .hrow .hn{flex:1;min-width:0}
 .hrow select{width:auto;font:inherit;font-size:15px;border:0;border-bottom:1px solid var(--line);background:none;border-radius:0}
+.tgl{font-size:13px;color:var(--sub);border:1px solid var(--line);border-radius:999px;padding:3px 14px;white-space:nowrap}
+.tgl.on{color:#fff;background:var(--accent);border-color:var(--accent)}
 .hrow label{display:flex;align-items:center;gap:4px;margin:0;font-size:13px;color:var(--ink);white-space:nowrap}
 .hrow input[type=checkbox]{width:auto}
 #pl{margin:8px 0 12px}
@@ -53,6 +55,9 @@ textarea{resize:vertical;min-height:4em}
 <script>
 const API=CONFIG.API_URL;
 const app=document.getElementById("app");
+const fit=t=>{t.style.height="auto";t.style.height=t.scrollHeight+"px"}; // 入力欄の高さを中身に合わせる（余白を作らない）
+new MutationObserver(()=>app.querySelectorAll("textarea").forEach(fit)).observe(app,{childList:true,subtree:true});
+addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")fit(e.target)});
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let pw=sessionStorage.getItem("pw")||"", D={pub:[],draft:[],pcs:[]}, tab="pub";
 
@@ -138,7 +143,7 @@ function form(kind,r={}){ // kind: pub / draft / new
 /* ---- シナリオページ（シナリオごとのシート）の編集 ---- */
 const norm=s=>String(s||"").normalize("NFKC").toLowerCase().trim();
 const yid=u=>(String(u).match(/(?:v=|youtu\.be\/|\/(?:live|shorts|embed)\/)([\w-]{11})/)||[])[1]||"";
-const parseHead=h=>{const p=String(h).split("|");return{name:p[0],w:p.includes("狭")?"狭":p.includes("広")?"広":"標準",f:p.includes("絞込")}};
+const parseHead=h=>{const p=String(h).split(/[|｜]/).map(x=>x.trim());return{name:p[0],w:p.includes("狭")?"狭":p.includes("広")?"広":"標準",f:p.some(x=>/^絞り?込み?$/.test(x))}};
 const mkHead=(n,w,f)=>n+(w==="狭"||w==="広"?"|"+w:"")+(f?"|絞込":"");
 const streamOf=u=>{const k=yid(u)||u; return u?D.pub.find(x=>parseUrls(x["URL"]).some(y=>(yid(y[1])||y[1])===k)):null};
 const sInfo=x=>x?[String(x["タグ"]||"").split(/[\s,、，]+/).filter(Boolean).map(t=>"#"+t.replace(/^[#＃]/,"")).join(" "),parseCast(x["PL/PC"]).map(c=>c[0]).join("、")].filter(Boolean).join("　"):"";
@@ -160,6 +165,7 @@ async function scPage(name){
     const j=await api("sc_get",{name});
     app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div>
     <button class="add" id="ns">＋ セッションを追加</button><button class="add" id="eh" style="margin-left:20px">項目を編集</button>
+    <p class="empty" style="padding:0 0 8px;font-size:12px">${j.heads.slice(1).map(h=>{const p=parseHead(h);return esc(p.name)+(p.w!=="標準"||p.f?"（"+[p.w!=="標準"?p.w:"",p.f?"絞込":""].filter(Boolean).join("・")+"）":"")}).join("　")||"項目なし"}</p>
     ${j.rows.map((r,i)=>{const u=(parseUrls(r.vals[0])[0]||[])[1]||"", st=streamOf(u), first=r.vals.slice(1).find(x=>x)||"";
       return `<button class="row sr" data-i="${i}">${thumbImg(u)}<span><b style="font-size:14px">${esc(sInfo(st)||(st?st["配信日時"]:"（配信なし）"))}</b><small>${esc(first.slice(0,40))}</small></span></button>`}).join("")||'<p class="empty">セッションがありません</p>'}`;
     document.getElementById("bk").onclick=list;
@@ -189,16 +195,20 @@ function scForm(name,j,r){
   if(r) document.getElementById("dl").onclick=()=>{if(confirm("削除しますか？元に戻せません")) run(()=>api("sc_delete",{name,row:r._row}))};
 }
 function scHeads(name,j){
-  const hrow=h=>{const p=parseHead(h);return `<div class="hrow" data-old="${esc(p.name)}"><input class="hn" value="${esc(p.name)}" placeholder="新しい項目名"><select class="hw">${["狭","標準","広"].map(w=>`<option${w===p.w?" selected":""}>${w}</option>`).join("")}</select><label><input type="checkbox" class="hc"${p.f?" checked":""}>絞込</label></div>`};
-  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>項目</span></div><p class="empty">名前の変更・幅（狭140／標準200／広320）・絞り込みに使うかを選べます。列の削除は、シートで行います。</p>
+  const hrow=h=>{const p=parseHead(h);return `<div class="hrow" data-old="${esc(p.name)}"><input class="hn" value="${esc(p.name)}" placeholder="新しい項目名"><select class="hw">${["狭","標準","広"].map(w=>`<option${w===p.w?" selected":""}>${w}</option>`).join("")}</select><button type="button" class="tgl${p.f?" on":""}">絞込</button></div>`};
+  const memo0=String(j.heads[0]||"").trim()==="URL"?"":j.heads[0];
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>項目</span></div>
+  <label>ページのメモ（タイトルの下に表示。[文字](URL) でリンク）</label><textarea id="pm">${esc(memo0)}</textarea>
+  <p class="empty">項目：名前の変更・幅（狭140／標準200／広320）・「絞込」（押して赤にすると、絞り込みに使います）。列の削除は、シートで行います。</p>
   <div id="hs">${j.heads.slice(1).map(hrow).join("")}</div><button class="plus" id="ah">＋ 項目を追加</button>
   <div class="btns"><button class="btn" id="sv">保存</button></div><p class="msg" id="msg"></p>`;
   document.getElementById("bk").onclick=()=>scPage(name);
   document.getElementById("ah").onclick=()=>document.getElementById("hs").insertAdjacentHTML("beforeend",hrow(""));
+  app.onclick=e=>{if(e.target.classList.contains("tgl")) e.target.classList.toggle("on")};
   document.getElementById("sv").onclick=async()=>{setMsg("保存中…");try{
     const hs=[...document.querySelectorAll(".hrow")].map(el=>{const n=(el.querySelector(".hn").value.trim()||el.dataset.old).replace(/\|/g,"");
-      return n?mkHead(n,el.querySelector(".hw").value,el.querySelector(".hc").checked):""}).filter(Boolean);
-    await api("sc_heads",{name,heads:hs}); scPage(name);}catch(e){setMsg(e.message)}};
+      return n?mkHead(n,el.querySelector(".hw").value,el.querySelector(".tgl").classList.contains("on")):""}).filter(Boolean);
+    await api("sc_heads",{name,memo:document.getElementById("pm").value,heads:hs}); scPage(name);}catch(e){setMsg(e.message)}};
 }
 function pcForm(r={}){
   const ss=parseSess(r["継続セッション"]);
