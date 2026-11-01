@@ -84,20 +84,28 @@ function login(msg=""){
   document.getElementById("go").onclick=go; document.getElementById("pw").onkeydown=e=>{if(e.key==="Enter")go()};
 }
 async function load(){ D=await api("list"); list(); }
+let qs=""; // 検索語（タブを切り替えても残る）
 function list(){
   const t={pub:"公開中",draft:"下書き",pcs:"PC詳細",sc:"シナリオ",tl:"年表"};
-  const items=tab==="tl"?tlSorted():tab==="sc"?(D.sc||[]):tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
+  const full=tab==="tl"?tlSorted():tab==="sc"?(D.sc||[]):tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
+  const hay=r=>norm(tab==="sc"?r:tab==="pcs"?[r.PC,r.PL].join(" "):tab==="tl"?r.date+" "+r.memo:["配信日時","シナリオ","システム","GM","PL/PC","タグ","メモ"].map(k=>r[k]).join(" "));
   app.innerHTML=`<div class="top"><b>管理</b><button id="out">ログアウト</button></div>
   <div class="tabs">${Object.keys(t).map(k=>`<button data-t="${k}" class="${tab===k?"on":""}">${t[k]}</button>`).join("")}</div>
   <button class="add" id="new">＋ 新規登録</button>
-  ${items.map((r,i)=>tab==="tl"?tlRow(r,i,items):tab==="sc"?`<button class="row" data-i="${i}"><b>${esc(r)}</b></button>`:tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
-   :`<button class="row" data-i="${i}"><small>${esc(r["配信日時"])}${tab==="draft"?"　"+esc(r["状態"]):""}</small><b>${esc(r["シナリオ"]||"（無題）")}</b></button>`).join("")||'<p class="empty">なし</p>'}`;
+  <input type="search" id="qs" placeholder="検索" value="${esc(qs)}" autocomplete="off" style="margin-bottom:8px"><div id="items"></div>`;
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;list()});
-  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="tl"?tlForm(items[b.dataset.i]):tab==="sc"?scPage(items[b.dataset.i]):tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
-  app.querySelectorAll("[data-mv]").forEach(b=>b.onclick=async()=>{const[i,d]=b.dataset.mv.split(":").map(Number); b.disabled=true;
-    try{await api("tl_swap",{a:items[i]._row,b:items[i+d]._row}); await load();}catch(e){alert(e.message)}});
   document.getElementById("new").onclick=()=>tab==="tl"?tlForm():tab==="sc"?scCreate():tab==="pcs"?pcForm():form("new");
   document.getElementById("out").onclick=()=>{sessionStorage.removeItem("pw");pw="";login()};
+  const fill=()=>{
+    const ws=norm(qs).split(/\s+/).filter(Boolean), items=full.filter(r=>ws.every(w=>hay(r).includes(w)));
+    document.getElementById("items").innerHTML=items.map((r,i)=>tab==="tl"?tlRow(r,full.indexOf(r),full):tab==="sc"?`<button class="row" data-i="${i}"><b>${esc(r)}</b></button>`:tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
+     :`<button class="row" data-i="${i}"><small>${esc(r["配信日時"])}${tab==="draft"?"　"+esc(r["状態"]):""}</small><b>${esc(r["シナリオ"]||"（無題）")}</b></button>`).join("")||'<p class="empty">なし</p>';
+    app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="tl"?tlForm(full[b.dataset.i]):tab==="sc"?scPage(items[b.dataset.i]):tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
+    app.querySelectorAll("[data-mv]").forEach(b=>b.onclick=async()=>{const[i,d]=b.dataset.mv.split(":").map(Number); b.disabled=true;
+      try{await api("tl_swap",{a:full[i]._row,b:full[i+d]._row}); await load();}catch(e){alert(e.message)}});
+  };
+  document.getElementById("qs").oninput=e=>{qs=e.target.value;fill()};
+  fill();
 }
 const pairRow=(a,b,pa,pb)=>`<div class="pair"><input value="${esc(a)}" placeholder="${pa}"><input value="${esc(b)}" placeholder="${pb}"><button class="x" type="button">×</button></div>`;
 function pairs(id,rows,pa,pb){return `<div id="${id}">${(rows.length?rows:[["",""]]).map(r=>pairRow(r[0],r[1],pa,pb)).join("")}</div><button class="plus" type="button" data-add="${id}" data-pa="${pa}" data-pb="${pb}">＋ 追加</button>`;}
