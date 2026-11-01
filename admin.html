@@ -25,7 +25,7 @@ h1{font-family:var(--serif);font-size:22px;margin:0 0 32px}
 label{display:block;font-size:12px;color:var(--sub);margin:24px 0 0;letter-spacing:.06em}
 input,textarea{width:100%;font:inherit;font-size:16px;padding:8px 0;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;outline:0;-webkit-appearance:none}
 input:focus,textarea:focus{border-bottom-color:var(--accent)}
-textarea{display:block;resize:none;min-height:2.8em;overflow:hidden}
+textarea{display:block;resize:none;min-height:0;overflow:hidden}
 .pair{display:flex;gap:12px;align-items:center}
 .pair input:first-child{flex:0 0 38%}
 .x{color:var(--sub);padding:0 4px}
@@ -55,7 +55,7 @@ textarea{display:block;resize:none;min-height:2.8em;overflow:hidden}
 <script>
 const API=CONFIG.API_URL;
 const app=document.getElementById("app");
-const fit=t=>{t.style.height="auto";t.style.height=t.scrollHeight+"px"}; // 入力欄の高さを中身に合わせる（余白を作らない）
+const fit=t=>{t.style.height="0";if(t.scrollHeight>0)t.style.height=t.scrollHeight+"px";else t.style.height="auto"}; // 空のときは1行 // 入力欄の高さを中身に合わせる（余白を作らない）
 new MutationObserver(()=>app.querySelectorAll("textarea").forEach(fit)).observe(app,{childList:true,subtree:true});
 addEventListener("input",e=>{if(e.target.tagName==="TEXTAREA")fit(e.target)});
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -165,7 +165,6 @@ async function scPage(name){
     const j=await api("sc_get",{name});
     app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div>
     <button class="add" id="ns">＋ セッションを追加</button><button class="add" id="eh" style="margin-left:20px">項目を編集</button>
-    <p class="empty" style="padding:0 0 8px;font-size:12px">${j.heads.slice(1).map(h=>{const p=parseHead(h);return esc(p.name)+(p.w!=="標準"||p.f?"（"+[p.w!=="標準"?p.w:"",p.f?"絞込":""].filter(Boolean).join("・")+"）":"")}).join("　")||"項目なし"}</p>
     ${j.rows.map((r,i)=>{const u=(parseUrls(r.vals[0])[0]||[])[1]||"", st=streamOf(u), first=r.vals.slice(1).find(x=>x)||"";
       return `<button class="row sr" data-i="${i}">${thumbImg(u)}<span><b style="font-size:14px">${esc(sInfo(st)||(st?st["配信日時"]:"（配信なし）"))}</b><small>${esc(first.slice(0,40))}</small></span></button>`}).join("")||'<p class="empty">セッションがありません</p>'}`;
     document.getElementById("bk").onclick=list;
@@ -176,7 +175,9 @@ async function scPage(name){
 }
 function scForm(name,j,r){
   const heads=j.heads.slice(1).map(parseHead);
-  const cand=D.pub.filter(x=>norm(x["シナリオ"])===norm(name)).flatMap(x=>parseUrls(x["URL"]).map(u=>({u:u[1],l:u[0],x})));
+  const key=u=>yid(u)||u;
+  const used=new Set(j.rows.filter(rw=>!r||rw._row!==r._row).flatMap(rw=>parseUrls(rw.vals[0]).map(u=>key(u[1])))); // すでに作ったセッション
+  const cand=D.pub.filter(x=>norm(x["シナリオ"])===norm(name)&&!parseUrls(x["URL"]).some(u=>used.has(key(u[1])))).flatMap(x=>parseUrls(x["URL"]).map(u=>({u:u[1],l:u[0],x})));
   const chips=i=>{const v=[...new Set(j.rows.flatMap(rw=>String(rw.vals[i+1]||"").split(/[,、，]/).map(x=>x.trim()).filter(Boolean)))];
     return v.map(x=>`<button type="button" class="chip" data-c="sf${i}" data-v="${esc(x)}">${esc(x)}</button>`).join("");};
   app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div>
