@@ -287,7 +287,7 @@ function detail(id){
   ${rels.length?`<h2 class="rel">関連する配信</h2>${rels.join("")}`:""}${note()}`;
 }
 const parseHead=h=>{const p=String(h).split(/[|｜]/).map(x=>x.trim());return{name:p[0],w:p.includes("狭")?140:p.includes("広")?320:200,f:p.some(x=>/^絞り?込み?$/.test(x))}}; // 項目名|狭|広|絞込
-function tlMemo(t,imgs){ // メモ：リンク化。YouTube・BOOTHのURLは画像つき（YouTubeは、サイト内の配信と一致したときだけ飛べる）
+function tlMemo(t,imgs){ // メモ：文字リンクだけが飛ぶ。YouTube・BOOTHのURLは、画像を表示だけする
   const media=[], seen=new Set();
   const html=esc(t).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[\w\-.\/?=&;%#~:+@!$*,]+)/g,(m,a,u1,u2)=>{
     const raw=(u1||u2).replace(/&amp;/g,"&"), st=byUrl(raw);
@@ -296,8 +296,8 @@ function tlMemo(t,imgs){ // メモ：リンク化。YouTube・BOOTHのURLは画�
     return st?`<a class="lk" href="#/s/${st.id}">${label}</a>`:`<a class="lk" href="${esc(raw)}" target="_blank" rel="noopener">${label}</a>`;
   });
   const pics=media.map(u=>{const id=ytId(u), st=byUrl(u);
-    if(id){const img=`<img loading="lazy" alt="" src="https://i.ytimg.com/vi/${id}/mqdefault.jpg" onerror="this.remove()">`; return st?`<a href="#/s/${st.id}">${img}</a>`:`<span>${img}</span>`;}
-    const im=imgs&&imgs[u]; return /booth\.pm/.test(u)&&im?`<a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="${esc(im)}" onerror="this.remove()"></a>`:"";}).join("");
+    if(id) return `<span><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${id}/mqdefault.jpg" onerror="this.remove()"></span>`; // 画像は表示だけ（飛ぶのは文字リンクだけ）
+    const im=imgs&&imgs[u]; return /booth\.pm/.test(u)&&im?`<span><img loading="lazy" alt="" src="${esc(im)}" onerror="this.remove()"></span>`:"";}).join("");
   return html+(pics?`<div class="tm">${pics}</div>`:"");
 }
 function tlPage(){ // 年表。最初は新しい順（同じ日付の中は、シートの行順）
