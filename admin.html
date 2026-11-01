@@ -10,6 +10,7 @@
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);background:#fff;font:15px/1.8 -apple-system,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 main{max-width:640px;margin:0 auto;padding:40px 28px 96px}
+button,a{touch-action:manipulation} /* ダブルタップ拡大を防ぐ */
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 h1{font-family:var(--serif);font-size:22px;margin:0 0 32px}
 .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:40px;font-size:12px;color:var(--sub)}
@@ -66,16 +67,16 @@ function login(msg=""){
 }
 async function load(){ D=await api("list"); list(); }
 function list(){
-  const t={pub:"公開中",draft:"下書き",pcs:"PC詳細"};
-  const items=tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
+  const t={pub:"公開中",draft:"下書き",pcs:"PC詳細",sc:"シナリオ"};
+  const items=tab==="sc"?(D.sc||[]):tab==="pcs"?D.pcs:(tab==="pub"?[...D.pub].sort((a,b)=>b["配信日時"].localeCompare(a["配信日時"])):D.draft);
   app.innerHTML=`<div class="top"><b>管理</b><button id="out">ログアウト</button></div>
   <div class="tabs">${Object.keys(t).map(k=>`<button data-t="${k}" class="${tab===k?"on":""}">${t[k]}</button>`).join("")}</div>
   <button class="add" id="new">＋ 新規登録</button>
-  ${items.map((r,i)=>tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
+  ${items.map((r,i)=>tab==="sc"?`<button class="row" data-i="${i}"><b>${esc(r)}</b></button>`:tab==="pcs"?`<button class="row" data-i="${i}"><b>${esc(r.PC)}</b><small>${esc(r.PL)}</small></button>`
    :`<button class="row" data-i="${i}"><small>${esc(r["配信日時"])}${tab==="draft"?"　"+esc(r["状態"]):""}</small><b>${esc(r["シナリオ"]||"（無題）")}</b></button>`).join("")||'<p class="empty">なし</p>'}`;
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;list()});
-  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
-  document.getElementById("new").onclick=()=>tab==="pcs"?pcForm():form("new");
+  app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>tab==="sc"?scPage(items[b.dataset.i]):tab==="pcs"?pcForm(items[b.dataset.i]):form(tab,items[b.dataset.i]));
+  document.getElementById("new").onclick=()=>tab==="sc"?scCreate():tab==="pcs"?pcForm():form("new");
   document.getElementById("out").onclick=()=>{sessionStorage.removeItem("pw");pw="";login()};
 }
 const pairRow=(a,b,pa,pb)=>`<div class="pair"><input value="${esc(a)}" placeholder="${pa}"><input value="${esc(b)}" placeholder="${pb}"><button class="x" type="button">×</button></div>`;
@@ -123,6 +124,57 @@ function form(kind,r={}){ // kind: pub / draft / new
     if(a==="unpub"&&confirm("非公開にしますか？（下書きに移ります）")) run(()=>api("unpublish",{row:r._row}));
     if(a==="del"&&confirm("削除しますか？元に戻せません")) run(()=>api("delete",{sheet:kind==="pub"?"pub":"draft",row:r._row}));
   };});
+}
+/* ---- シナリオページ（シナリオごとのシート）の編集 ---- */
+const norm=s=>String(s||"").normalize("NFKC").toLowerCase().trim();
+const vidOf=u=>(String(u).match(/(?:v=|youtu\.be\/|\/(?:live|shorts|embed)\/)([\w-]{11})/)||[])[1]||String(u);
+async function scCreate(){
+  app.onclick=null;
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>新しいシナリオページ</span></div>
+  <label>シナリオ名（配信一覧のシナリオ名と同じにする）</label><input id="n1"><label>項目（, で区切る。あとで増やせます）</label><input id="n2" placeholder="NPCA,NPCB,備考">
+  <div class="btns"><button class="btn" id="go">作る</button></div><p class="msg" id="msg"></p>`;
+  document.getElementById("bk").onclick=list;
+  document.getElementById("go").onclick=async()=>{setMsg("作成中…");try{const nm=n1.value.trim();
+    await api("sc_create",{name:nm,heads:n2.value.split(/[,，、]/).map(x=>x.trim()).filter(Boolean)}); D=await api("list"); scPage(nm);}catch(e){setMsg(e.message)}};
+}
+async function scPage(name){
+  app.onclick=null;
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div><p class="empty">読み込み中</p>`;
+  document.getElementById("bk").onclick=list;
+  try{
+    const j=await api("sc_get",{name}), heads=j.heads.slice(1);
+    const label=r=>{const u=parseUrls(r.vals[0])[0], st=u&&D.pub.find(x=>parseUrls(x["URL"]).some(y=>vidOf(y.url)===vidOf(u.url)));
+      return [st?st["配信日時"]:"", r.vals.slice(1).find(x=>x)||(u?u.url:"（空）")];};
+    app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div>
+    <button class="add" id="ns">＋ セッションを追加</button><button class="add" id="eh" style="margin-left:20px">項目を編集</button>
+    ${j.rows.map((r,i)=>{const l=label(r);return `<button class="row" data-i="${i}"><small>${esc(l[0])}</small><b>${esc(String(l[1]).slice(0,40))}</b></button>`}).join("")||'<p class="empty">セッションがありません</p>'}`;
+    document.getElementById("bk").onclick=list;
+    document.getElementById("ns").onclick=()=>scForm(name,j,null);
+    document.getElementById("eh").onclick=()=>scHeads(name,j);
+    app.querySelectorAll("[data-i]").forEach(b=>b.onclick=()=>scForm(name,j,j.rows[b.dataset.i]));
+  }catch(e){app.insertAdjacentHTML("beforeend",`<p class="msg">${esc(e.message)}</p>`)}
+}
+function scForm(name,j,r){
+  const heads=j.heads.slice(1), cand=D.pub.filter(x=>norm(x["シナリオ"])===norm(name)).flatMap(x=>parseUrls(x["URL"]).map(u=>`<option value="${esc(u.url)}">${esc(x["配信日時"]+" "+u.label)}</option>`));
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>${esc(name)}</span></div>
+  <label>配信URL（候補から選べます。最初のURLで、配信と結びつきます）</label><input id="su" list="ul" value="${esc(r?r.vals[0]:"")}"><datalist id="ul">${cand.join("")}</datalist>
+  ${heads.map((h,i)=>`<label>${esc(h)}</label><textarea id="sf${i}">${esc(r?r.vals[i+1]:"")}</textarea>`).join("")}
+  <div class="btns"><button class="btn" id="sv">保存</button>${r?'<button class="btn d" id="dl">削除</button>':""}</div><p class="msg" id="msg"></p>`;
+  document.getElementById("bk").onclick=()=>scPage(name);
+  const run=async fn=>{setMsg("処理中…");try{await fn();scPage(name)}catch(e){setMsg(e.message)}};
+  document.getElementById("sv").onclick=()=>run(()=>api("sc_save",{name,row:r?r._row:undefined,vals:[su.value.trim(),...heads.map((_,i)=>document.getElementById("sf"+i).value)]}));
+  if(r) document.getElementById("dl").onclick=()=>{if(confirm("削除しますか？元に戻せません")) run(()=>api("sc_delete",{name,row:r._row}))};
+}
+function scHeads(name,j){
+  const heads=j.heads.slice(1), inp=v=>`<input class="hi" value="${esc(v)}" placeholder="新しい項目名">`;
+  app.innerHTML=`<div class="top"><button id="bk">← 戻る</button><span>項目</span></div><p class="empty">名前を書き換えると、項目名が変わります（列の削除は、シートで行います）</p>
+  <div id="hs">${heads.map(inp).join("")}</div><button class="plus" id="ah">＋ 項目を追加</button>
+  <div class="btns"><button class="btn" id="sv">保存</button></div><p class="msg" id="msg"></p>`;
+  document.getElementById("bk").onclick=()=>scPage(name);
+  document.getElementById("ah").onclick=()=>document.getElementById("hs").insertAdjacentHTML("beforeend",inp(""));
+  document.getElementById("sv").onclick=async()=>{setMsg("保存中…");try{
+    const hs=[...document.querySelectorAll(".hi")].map((x,k)=>x.value.trim()||heads[k]||"").filter(Boolean);
+    await api("sc_heads",{name,heads:hs}); scPage(name);}catch(e){setMsg(e.message)}};
 }
 function pcForm(r={}){
   const ss=parseSess(r["継続セッション"]);
